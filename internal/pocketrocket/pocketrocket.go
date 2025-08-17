@@ -16,26 +16,25 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
-	"golang.org/x/term"
 
 	"github.com/manifoldco/promptui"
 )
 
 // Setup performs an interactive process that acquires
 // the storage backend for the pulumi stack.
-func Setup(ctx context.Context) (auto.Workspace, error) {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		width = 50
-	}
-	fmt.Println(generateHeader(width))
+func Setup(ctx context.Context) error {
+	go func() {
+		<-ctx.Done()
+		os.Exit(1)
+	}()
+
+	fmt.Println(generateHeader())
 
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("🔸 Bootstrapping aws client...")
-
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	fmt.Printf("🔹 Enter the project name: ")
@@ -44,59 +43,26 @@ func Setup(ctx context.Context) (auto.Workspace, error) {
 
 	bucket, prefix, err := setupBucket(ctx, cfg, scanner)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup bucket: %v", err)
+		return fmt.Errorf("failed to setup bucket: %v", err)
 	}
-	_ = fmt.Sprintf("s3://%s.s3.amazonaws.com/%s", bucket, prefix)
 
 	ws, err := auto.NewLocalWorkspace(ctx, auto.Project(workspace.Project{
 		Name:    tokens.PackageName(project),
-		Runtime: workspace.NewProjectRuntimeInfo("go", map[string]interface{}{}),
+		Runtime: workspace.NewProjectRuntimeInfo("go", map[string]any{}),
 		Backend: &workspace.ProjectBackend{
-			URL: "s3://",
+			URL: fmt.Sprintf("s3://%s.s3.amazonaws.com/%s", bucket, prefix),
 		},
 	}))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_ = ws
-	return nil, nil
-}
 
-func generateHeader(width int) string {
-	if width < 100 {
-		return "🚀 Welcome to the pocketrocket bootstrap process"
+	err = deploy(ctx, scanner, ws)
+	if err!=nil {
+		return err
 	}
-	return `
-                                      ▓██                                    
-                                     ▓▓███                                   
-                                    ▓▒█████                                  
-                                   ▓▒▒▓▓██▓▓                                 
-                                   ▒▒▒██████                                 
-                                  ▒▒▒███████▓                                
-                                  ▒▒████████▓                                
-                                  ▒▒▒▓██████▓                                
-                                  ▒▒▒▓▓█████▓                                
-                                  ▒▒▒▓▓▓████▓                                
-                                  ▒▒▒▓▓▓████▓                                
-                                 ▒█▓▓▓▓▓█████▓                               
-                                ▓██▓▓▓▓██████▓▓                              
-                               ▓███▓▓▓▓██████▓▒▓                             
-                               █▓▓ █▓███████  ▒▒                             
-                                  ▒▒▒▒▒▓▒▒▓▒▒                                
-                                 ▒▒▒▒▒▒▒▒▒▒▒▒▒                               
-                                 ▒▒▒▒▒▒▒▒▒▒▒▒▒                               
-                                ▒▒▒▒▒▒▒▒▒▒▒▓▒▒                               
-                             ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓  ▒▒▓▓                       
-                   ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓████▓▓▓▓▓▓▓                    
-              ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓▓   ▓▒▒▒▒          
-          ▒▒▒▒▒▓▒▒▓▓▓▒▒▒▒▒▒▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▒▓██▓▓▓▓▓▓▓▓▓█▓▓▓▓▒▒▓▓▒         
-        ▒▒▒▒▒▒▓▓▒▒▓▒▓▒▒▒▒▒▒▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓███▓▓▒▒▓▓█████▓▓▓▓▓▓▓▓       
-   ▒▒▓▒▒▒▒▒▒▒▒▒▓▓▓▓▓▒▒▒▓▒▒▓▒▒▒▒▒▒▓▒▒▒▒▓▒▒▒▒▒▒▓▓▓▓▓▓▓▒▓▓▒▓▓▓▓▓▓▓▓▓▓█████▓▓▓▓  
-  ▒▒▓▒▓▓▒▒▒▒▓▓▒▒▒▒▓▒▒▒▓▓▓▓▒▒▒▓▒▒▒▓▓▓▒▓▓▒▒▓▒▓▓▓▓█████▓▓▒▒▓▓█▓▓▓▓▓█████▓█▓█▓███
-           █████▓████████████▓▒▓▓█████▓▓█████▓▓█████████████████             
-		
-           🚀 Welcome to the pocketrocket bootstrap process 🚀
-		`
+
+	return nil
 }
 
 func setupBucket(ctx context.Context, cfg aws.Config, scanner *bufio.Scanner) (string, string, error) {

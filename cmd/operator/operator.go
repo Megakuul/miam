@@ -9,7 +9,6 @@ import (
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/megakuul/miam/internal/pocketrocket"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/spf13/pflag"
@@ -71,30 +70,11 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("invalid project name: %v", err)
 	}
 
-	var ws auto.Workspace 
 	if flags.Pocket {
-		ws, err = pocketrocket.Setup(ctx)
-		if err!=nil {
-			return err
-		}
+		return pocketrocket.Setup(ctx)
 	} else {
-		// acquire the workspace via lookup
+		return nil
 	}
-	return nil
-	ws.SetProgram(Deploy)
-
-	stack, err := auto.UpsertStack(ctx, "prod", ws)
-	if err != nil {
-		return fmt.Errorf("failed to construct stack: %v", err)
-	}
-	result, err := stack.Up(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to update stack: %v", err)
-	}
-	_ = result
-
-	// some := result.Summary.Config[""]
-	return nil
 }
 
 func Deploy(ctx *pulumi.Context) error {
