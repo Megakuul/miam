@@ -8,20 +8,17 @@ import (
 	"syscall"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/megakuul/miam/internal/pocketrocket"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/spf13/pflag"
 )
 
 type Flags struct {
-	Pocket bool
 	Config string
 }
 
 func ReadFlags() *Flags {
 	flags := &Flags{}
-	pflag.BoolVarP(&flags.Pocket, "pocket-rocket", "p", false, "Bootstrap operator (this command can be used locally)")
 	pflag.StringVarP(&flags.Config, "config", "c", "config.toml", "Specify a custom config file")
 	pflag.Parse()
 	return flags
@@ -70,11 +67,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("invalid project name: %v", err)
 	}
 
-	if flags.Pocket {
-		return pocketrocket.Setup(ctx)
-	} else {
-		return nil
-	}
+	return nil
 }
 
 func Deploy(ctx *pulumi.Context) error {

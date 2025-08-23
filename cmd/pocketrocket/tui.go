@@ -1,4 +1,4 @@
-package pocketrocket
+package main
 
 import (
 	"os"

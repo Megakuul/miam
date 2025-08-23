@@ -1,4 +1,4 @@
-package pocketrocket
+package main
 
 import (
 	"bufio"
@@ -10,9 +10,15 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 )
 
-// deploy performs an interactive process to deploy the prod operator stack on the provided workspace.
-func deploy(ctx context.Context, scanner *bufio.Scanner, ws auto.Workspace) error {
-	stack, err := auto.UpsertStack(ctx, "prod", ws)
+// launch performs an interactive process to deploy the operator stack on the provided workspace.
+func launch(ctx context.Context, scanner *bufio.Scanner, ws auto.Workspace) error {
+	fmt.Printf("🔹 Enter the environment: [prod] ")
+	scanner.Scan()
+	environment := scanner.Text()
+	if environment == "" {
+		environment = "prod"
+	}
+	stack, err := auto.UpsertStack(ctx, environment, ws)
 	if err != nil {
 		return fmt.Errorf("failed to construct stack: %v", err)
 	}
