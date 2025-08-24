@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -11,11 +10,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/fatih/color"
-	"github.com/manifoldco/promptui"
+	"github.com/pterm/pterm"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
@@ -37,9 +38,11 @@ func main() {
 	}()
 
 	if err := run(ctx); err != nil {
+		fmt.Println()
 		fmt.Println("❌ ========= ERROR =========")
 		fmt.Println()
-		color.RGB(255, 82, 82).Println(err.Error())
+		color.RGB(255, 82, 82).Println(strings.TrimSpace(err.Error()))
+		fmt.Println()
 		fmt.Println("❌ ========= ERROR =========")
 		os.Exit(1)
 	}
@@ -49,25 +52,22 @@ func main() {
 func run(ctx context.Context) error {
 	fmt.Println(generateHeader())
 
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("🔸 Bootstrapping aws client...")
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("🔹 Enter the project name: ")
-	scanner.Scan()
-	project := scanner.Text()
+	project, _ := pterm.DefaultInteractiveTextInput.
+		WithDefaultValue("miam-operator").Show("Enter project name")
 
-	bucket, prefix, err := setupBucket(ctx, cfg, scanner)
+	bucket, prefix, err := setupBucket(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to setup bucket: %v", err)
 	}
 
-	secretArn, err := setupSecret(ctx, cfg, scanner)
+	keyAlias, err := setupKey(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("failed to setup secret: %v", err)
+		return fmt.Errorf("failed to setup kms: %v", err)
 	}
 
 	ws, err := auto.NewLocalWorkspace(ctx, auto.Project(workspace.Project{
@@ -77,25 +77,30 @@ func run(ctx context.Context) error {
 		Backend: &workspace.ProjectBackend{
 			URL: fmt.Sprintf("s3://%s/%s", bucket, prefix),
 		},
-	}), auto.SecretsProvider(fmt.Sprintf("awskms://%s", secretArn)))
+	}), auto.SecretsProvider(fmt.Sprintf("awskms://%s", keyAlias)))
 	if err != nil {
 		return err
 	}
+
+	spinner, _ := pterm.DefaultSpinner.WithRemoveWhenDone(true).
+		Start("Searching for existing stacks...")
+	defer spinner.Stop()
 	stacks, err := ws.ListStacks(ctx)
 	if err != nil {
 		return err
 	}
+	spinner.Stop()
 	if len(stacks) < 1 {
-		return launch(ctx, scanner, ws)
+		return launch(ctx, ws)
 	} else {
-		fmt.Printf("🔹 Enter action: [Launch/Nuke] ")
-		scanner.Scan()
-		switch strings.ToLower(scanner.Text()) {
-		case "l", "launch":
-			return launch(ctx, scanner, ws)
-		case "n", "nuke":
+		action, _ := pterm.DefaultInteractiveSelect.
+			WithOptions([]string{"launch", "nuke"}).Show("Select action")
+		switch action {
+		case "launch":
+			return launch(ctx, ws)
+		case "nuke":
 			for _, stack := range stacks {
-				err = nuke(ctx, scanner, ws, stack.Name)
+				err = nuke(ctx, ws, stack.Name)
 				if err != nil {
 					return err
 				}
@@ -107,48 +112,55 @@ func run(ctx context.Context) error {
 	}
 }
 
-func setupSecret(ctx context.Context, cfg aws.Config, scanner *bufio.Scanner) (string, error) {
-	smClient := secretsmanager.NewFromConfig(cfg)
-	fmt.Printf("🔹 Use existing secret for infra state? [y/N] ")
-	scanner.Scan()
-	if strings.ToLower(scanner.Text()) == "y" {
-		listResp, err := smClient.ListSecrets(ctx, &secretsmanager.ListSecretsInput{})
+func setupKey(ctx context.Context, cfg aws.Config) (string, error) {
+	kmsClient := kms.NewFromConfig(cfg)
+	ok, _ := pterm.DefaultInteractiveConfirm.
+		WithDefaultValue(false).Show("Use existing kms key for state encryption?")
+	if ok {
+		listResp, err := kmsClient.ListAliases(ctx, &kms.ListAliasesInput{})
 		if err != nil {
 			return "", err
 		}
-		secrets := []string{}
-		for _, secret := range listResp.SecretList {
-			secrets = append(secrets, *secret.ARN)
+		keys := []string{}
+		for _, alias := range listResp.Aliases {
+			keys = append(keys, *alias.AliasName)
 		}
-		prompt := promptui.Select{
-			Label: "Select secret",
-			Items: secrets,
-		}
-		_, selected, err := prompt.Run()
+		selected, err := pterm.DefaultInteractiveSelect.
+			WithOptions(keys).
+			Show("Select kms key")
 		if err != nil {
 			return "", err
 		}
 		return selected, nil
 	} else {
-		fmt.Printf("🔹 Enter the secret name: ")
-		scanner.Scan()
-		name := scanner.Text()
-		createResp, err := smClient.CreateSecret(ctx, &secretsmanager.CreateSecretInput{
-			Name: aws.String(name),
-			Description: aws.String("Secret used to encrypt sensitive pulumi stack data"),
+		name, _ := pterm.DefaultInteractiveTextInput.
+			Show("Enter key alias name")
+		alias := fmt.Sprintf("alias/%s", name)
+
+		spinner, _ := pterm.DefaultSpinner.WithRemoveWhenDone(true).
+			Start("Creating kms key...")
+		defer spinner.Stop()
+		createResp, err := kmsClient.CreateKey(ctx, &kms.CreateKeyInput{
+			KeySpec:     types.KeySpecSymmetricDefault,
+			KeyUsage:    kmstypes.KeyUsageTypeEncryptDecrypt,
+			Description: aws.String("Key used to encrypt sensitive pulumi stack data"),
 		})
 		if err != nil {
 			return "", err
 		}
-		return *createResp.ARN, nil
+		_, err = kmsClient.CreateAlias(ctx, &kms.CreateAliasInput{
+			AliasName:   aws.String(alias),
+			TargetKeyId: createResp.KeyMetadata.KeyId,
+		})
+		return alias, err
 	}
 }
 
-func setupBucket(ctx context.Context, cfg aws.Config, scanner *bufio.Scanner) (string, string, error) {
+func setupBucket(ctx context.Context, cfg aws.Config) (string, string, error) {
 	s3Client := s3.NewFromConfig(cfg)
-	fmt.Printf("🔹 Use existing s3 bucket for infra state? [y/N] ")
-	scanner.Scan()
-	if strings.ToLower(scanner.Text()) == "y" {
+	ok, _ := pterm.DefaultInteractiveConfirm.
+		WithDefaultValue(false).Show("Use existing s3 bucket for state?")
+	if ok {
 		listResp, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
 		if err != nil {
 			return "", "", err
@@ -157,31 +169,26 @@ func setupBucket(ctx context.Context, cfg aws.Config, scanner *bufio.Scanner) (s
 		for _, bucket := range listResp.Buckets {
 			buckets = append(buckets, *bucket.Name)
 		}
-		prompt := promptui.Select{
-			Label: "Select bucket",
-			Items: buckets,
-		}
-		_, selected, err := prompt.Run()
+		selected, err := pterm.DefaultInteractiveSelect.
+			WithOptions(buckets).
+			Show("Select bucket")
 		if err != nil {
 			return "", "", err
 		}
-		fmt.Printf("🔹 Specify bucket prefix: ")
-		scanner.Scan()
-		return selected, scanner.Text(), nil
+		prefix, _ := pterm.DefaultInteractiveTextInput.WithDefaultValue("/").Show("Specify bucket prefix")
+		return selected, prefix, nil
 	} else {
-		fmt.Printf("🔹 Enter the bucket name: ")
-		scanner.Scan()
-		name := scanner.Text()
-		fmt.Printf("🔹 Enter the bucket region [eu-central-1]: ")
-		scanner.Scan()
-		region := types.BucketLocationConstraint(scanner.Text())
-		if region == "" {
-			region = types.BucketLocationConstraintEuCentral1
-		}
+		name, _ := pterm.DefaultInteractiveTextInput.
+			Show("Enter state bucket name")
+		region, _ := pterm.DefaultInteractiveTextInput.
+			WithDefaultValue("eu-central-1").Show("Enter state bucket name")
+		spinner, _ := pterm.DefaultSpinner.WithRemoveWhenDone(true).
+			Start("Creating state bucket...")
+		defer spinner.Stop()
 		createResp, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
 			Bucket: aws.String(name),
-			CreateBucketConfiguration: &types.CreateBucketConfiguration{
-				LocationConstraint: region,
+			CreateBucketConfiguration: &s3types.CreateBucketConfiguration{
+				LocationConstraint: s3types.BucketLocationConstraint(region),
 			},
 		})
 		if err != nil {
