@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package operator.v1.maintenance;
+
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/maintenance";
+
+
+enum State {
+  RUNNING = 0;
+  DOWN = 1;
+  DEPLOYING = 2;
+  ROLLING_BACK = 3;
+}
+
+message ClusterStatus {
+  string name = 1;
+  repeated string tags = 2;
+  State state = 3;
+  string error = 4;
+}
+
+message ClusterConfig {
+  ClusterStatus status = 1;
+  string repo_url = 2;
+  string repo_ref = 3;
+  
+  InstanceConfig control_config = 4;
+  InstanceConfig worker_config = 5;
+}
+
+message InstanceConfig {
+  string type = 1;
+  int64 min_scale = 2;
+  int64 max_scale = 3;
+}
+
+message GetRequest {
+}
+
+message GetResponse {
+  map<string, Status> statuses = 1;
+}
+
+message DescribeRequest {
+  string name = 1;
+}
+
+message DescribeResponse {
+  Config config = 1;
+}
+
+message UpsertRequest {
+  Config config = 1;
+}
+
+message UpsertResponse {
+}
+
+message DestroyRequest {
+  string name = 1;
+}
+
+message DestroyResponse {
+}

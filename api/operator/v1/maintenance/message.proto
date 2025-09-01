@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package operator.v1.maintenance;
+
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/maintenance";
+
+message Config {
+  string repo_url = 1;
+  string repo_ref = 2;
+  bool auto_deploy = 3;
+}
+
+message UpdateRequest {
+  Config config = 1;
+}
+
+message UpdateResponse {
+}
+
+message DeployRequest {
+  string name = 1;
+}
+
+message DeployResponse {
+}
+
+message RollbackRequest {
+  string name = 1;
+}
+
+message  {
+}

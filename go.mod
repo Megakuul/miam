@@ -8,9 +8,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.53.1
 	github.com/fatih/color v1.18.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/ilyakaznacheev/cleanenv v1.5.0
-	github.com/manifoldco/promptui v0.9.0
 	github.com/pterm/pterm v0.12.81
+	github.com/pulumi/pulumi-aws/sdk/v7 v7.5.0
 	github.com/pulumi/pulumi/sdk/v3 v3.188.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/term v0.32.0
@@ -50,7 +51,6 @@ require (
 	github.com/charmbracelet/bubbletea v0.25.0 // indirect
 	github.com/charmbracelet/lipgloss v0.7.1 // indirect
 	github.com/cheggaaa/pb v1.0.29 // indirect
-	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/cyphar/filepath-securejoin v0.3.6 // indirect
@@ -125,5 +125,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
-	pgregory.net/rapid v0.6.1 // indirect
 )

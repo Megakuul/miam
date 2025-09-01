@@ -8,8 +8,6 @@ import (
 	"syscall"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/spf13/pflag"
 )
 
@@ -38,6 +36,7 @@ func main() {
 		select {
 		case <-sigs:
 			cancel()
+			os.Exit(1) // TODO remove
 			return
 		case <-ctx.Done():
 			return
@@ -48,13 +47,12 @@ func main() {
 		os.Stderr.WriteString("ERROR: " + err.Error())
 		os.Exit(1)
 	}
-	return
 }
 
 func run(ctx context.Context) error {
 	flags := ReadFlags()
 	config := &Config{}
-	if err := cleanenv.ReadConfig(flags.Config, config); err !=nil {
+	if err := cleanenv.ReadConfig(flags.Config, config); err != nil {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("cannot acquire file config: %v", err)
 		}
@@ -62,14 +60,8 @@ func run(ctx context.Context) error {
 	if err := cleanenv.ReadEnv(config); err != nil {
 		return fmt.Errorf("cannot acquire env config: %v", err)
 	}
-	err := tokens.ValidateProjectName(config.Project)
-	if err != nil {
-		return fmt.Errorf("invalid project name: %v", err)
-	}
 
-	return nil
-}
+	startServer()
 
-func Deploy(ctx *pulumi.Context) error {
 	return nil
 }

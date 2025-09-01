@@ -16,10 +16,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/fatih/color"
+	"github.com/megakuul/miam/deployments/operator"
 	"github.com/pterm/pterm"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func main() {
@@ -60,12 +62,12 @@ func run(ctx context.Context) error {
 	project, _ := pterm.DefaultInteractiveTextInput.
 		WithDefaultValue("miam-operator").Show("Enter project name")
 
-	bucket, prefix, err := setupBucket(ctx, cfg)
+	bucket, prefix, err := setupBucket(ctx, cfg, project)
 	if err != nil {
 		return fmt.Errorf("failed to setup bucket: %v", err)
 	}
 
-	keyAlias, err := setupKey(ctx, cfg)
+	keyAlias, err := setupKey(ctx, cfg, project)
 	if err != nil {
 		return fmt.Errorf("failed to setup kms: %v", err)
 	}
@@ -75,9 +77,12 @@ func run(ctx context.Context) error {
 		Author:  aws.String("miam pocketrocket cli"),
 		Runtime: workspace.NewProjectRuntimeInfo("go", map[string]any{}),
 		Backend: &workspace.ProjectBackend{
-			URL: fmt.Sprintf("s3://%s/%s", bucket, prefix),
+			URL: fmt.Sprintf("s3://%s%s", bucket, prefix),
 		},
-	}), auto.SecretsProvider(fmt.Sprintf("awskms://%s", keyAlias)))
+	}), 
+		auto.SecretsProvider(fmt.Sprintf("awskms://%s", keyAlias)), 
+		auto.Program(operator.Deploy),
+	)
 	if err != nil {
 		return err
 	}
@@ -112,7 +117,7 @@ func run(ctx context.Context) error {
 	}
 }
 
-func setupKey(ctx context.Context, cfg aws.Config) (string, error) {
+func setupKey(ctx context.Context, cfg aws.Config, project string) (string, error) {
 	kmsClient := kms.NewFromConfig(cfg)
 	ok, _ := pterm.DefaultInteractiveConfirm.
 		WithDefaultValue(false).Show("Use existing kms key for state encryption?")
@@ -134,7 +139,7 @@ func setupKey(ctx context.Context, cfg aws.Config) (string, error) {
 		return selected, nil
 	} else {
 		name, _ := pterm.DefaultInteractiveTextInput.
-			Show("Enter key alias name")
+			WithDefaultValue(project).Show("Enter key alias name")
 		alias := fmt.Sprintf("alias/%s", name)
 
 		spinner, _ := pterm.DefaultSpinner.WithRemoveWhenDone(true).
@@ -156,7 +161,7 @@ func setupKey(ctx context.Context, cfg aws.Config) (string, error) {
 	}
 }
 
-func setupBucket(ctx context.Context, cfg aws.Config) (string, string, error) {
+func setupBucket(ctx context.Context, cfg aws.Config, project string) (string, string, error) {
 	s3Client := s3.NewFromConfig(cfg)
 	ok, _ := pterm.DefaultInteractiveConfirm.
 		WithDefaultValue(false).Show("Use existing s3 bucket for state?")
@@ -179,13 +184,13 @@ func setupBucket(ctx context.Context, cfg aws.Config) (string, string, error) {
 		return selected, prefix, nil
 	} else {
 		name, _ := pterm.DefaultInteractiveTextInput.
-			Show("Enter state bucket name")
+			WithDefaultValue(project).Show("Enter state bucket name")
 		region, _ := pterm.DefaultInteractiveTextInput.
 			WithDefaultValue("eu-central-1").Show("Enter state bucket name")
 		spinner, _ := pterm.DefaultSpinner.WithRemoveWhenDone(true).
 			Start("Creating state bucket...")
 		defer spinner.Stop()
-		createResp, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
+		_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
 			Bucket: aws.String(name),
 			CreateBucketConfiguration: &s3types.CreateBucketConfiguration{
 				LocationConstraint: s3types.BucketLocationConstraint(region),
@@ -194,6 +199,6 @@ func setupBucket(ctx context.Context, cfg aws.Config) (string, string, error) {
 		if err != nil {
 			return "", "", err
 		}
-		return strings.TrimPrefix(*createResp.Location, "/"), "", nil
+		return name, "/", nil
 	}
 }

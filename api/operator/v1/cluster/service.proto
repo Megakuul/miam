@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package operator.v1.maintenance;
+
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/maintenance";
+
+import "operator/v1/maintenance/message.proto";
+
+service DeployService {
+  rpc Update(UpdateRequest) returns (UpdateResponse) {}
+  rpc Deploy(DeployRequest) returns (DeployResponse) {}
+  rpc Rollback(RollbackRequest) returns (RollbackResponse) {}
+}
