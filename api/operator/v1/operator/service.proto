@@ -1,13 +1,12 @@
 syntax = "proto3";
 
-package operator.v1.cluster;
+package operator.v1.operator;
 
-option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/cluster";
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/operator";
 
-import "operator/v1/cluster/message.proto";
+import "operator/v1/operator/message.proto";
 
-service ClusterService {
-  rpc List(ListRequest) returns (ListResponse) {}
+service MaintenanceService {
   rpc Get(GetRequest) returns (GetResponse) {}
   rpc Describe(DescribeRequest) returns (DescribeResponse) {}
   rpc Update(UpdateRequest) returns (UpdateResponse) {}

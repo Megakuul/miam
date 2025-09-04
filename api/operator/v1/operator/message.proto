@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package operator.v1.operator;
+
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/operator";
+
+
+// dynamodb design:
+// partkey -> project name (hot parted but I dont care there are not many entries)
+// sortkey -> revision
+
+enum State {
+  ACTIVE = 0;
+  INACTIVE = 1;
+  DEPLOYING = 2;
+  FAILED = 3;
+}
+
+message OperatorStatus {
+  string revision = 2;
+  State state = 4;
+  string error = 5;
+}
+
+message OperatorConfig {
+  string repo_url = 2;
+  string repo_ref = 3;
+}
+
+message GetRequest {
+}
+
+message GetResponse {
+  repeated OperatorStatus revisions = 1; // returns all revisions of the operator 
+}
+
+message DescribeRequest {
+  string revision = 1;
+}
+
+message DescribeResponse {
+  OperatorConfig config = 1;
+}
+
+message UpdateRequest {
+  OperatorConfig config = 1;
+}
+
+message UpdateResponse {
+  string revision = 1;
+}
+
+message DestroyRequest {
+}
+
+message DestroyResponse {
+}

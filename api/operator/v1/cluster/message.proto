@@ -1,26 +1,31 @@
 syntax = "proto3";
 
-package operator.v1.maintenance;
+package operator.v1.cluster;
 
-option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/maintenance";
+option go_package = "github.com/megakuul/miam/pkg/api/operator/v1/cluster";
 
+// dynamodb design:
+// partkey -> project name
+// sortkey -> revision
+// gsi.partkey -> revision (list latest revision)
+// gsi.sortkey -> project name
 
 enum State {
-  RUNNING = 0;
-  DOWN = 1;
+  ACTIVE = 0;
+  INACTIVE = 1;
   DEPLOYING = 2;
-  ROLLING_BACK = 3;
+  FAILED = 3;
 }
 
 message ClusterStatus {
   string name = 1;
-  repeated string tags = 2;
-  State state = 3;
-  string error = 4;
+  string revision = 2;
+  repeated string tags = 3;
+  State state = 4;
+  string error = 5;
 }
 
 message ClusterConfig {
-  ClusterStatus status = 1;
   string repo_url = 2;
   string repo_ref = 3;
   
@@ -34,26 +39,36 @@ message InstanceConfig {
   int64 max_scale = 3;
 }
 
+message ListRequest {
+}
+
+message ListResponse {
+  repeated ClusterStatus clusters = 1; // returns latest revision of all clusters
+}
+
 message GetRequest {
+  string name = 1;
 }
 
 message GetResponse {
-  map<string, Status> statuses = 1;
+  repeated ClusterStatus revisions = 1; // returns all revisions of one cluster 
 }
 
 message DescribeRequest {
   string name = 1;
+  string revision = 2;
 }
 
 message DescribeResponse {
-  Config config = 1;
+  ClusterConfig config = 1;
 }
 
-message UpsertRequest {
-  Config config = 1;
+message UpdateRequest {
+  ClusterConfig config = 1;
 }
 
-message UpsertResponse {
+message UpdateResponse {
+  string revision = 1;
 }
 
 message DestroyRequest {
